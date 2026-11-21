@@ -8,23 +8,63 @@ export const openResumeFile = (storageUrl?: string, filename?: string, candidate
   const defaultFilename = filename || 'Candidate_Resume.pdf';
   const name = candidateName || 'Alex Johnson';
 
-  // 1. If it's already a valid local blob URL, open immediately
+  // 1. If it's a base64 Data URL (e.g. data:application/pdf;base64,...), convert to Blob and open in new tab
+  if (storageUrl && storageUrl.startsWith('data:')) {
+    try {
+      const parts = storageUrl.split(',');
+      const mimeMatch = parts[0].match(/:(.*?);/);
+      const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+      const b64 = parts[1] || '';
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const fileBlob = new Blob([bytes], { type: mime });
+      const fileBlobUrl = URL.createObjectURL(fileBlob);
+      window.open(fileBlobUrl, '_blank');
+      return;
+    } catch (e) {
+      console.warn("Could not open data URL as blob:", e);
+    }
+  }
+
+  // 2. If it's already a valid local blob URL, open immediately
   if (storageUrl && storageUrl.startsWith('blob:')) {
     window.open(storageUrl, '_blank');
     return;
   }
 
-  // 2. If it's a backend download endpoint on localhost:8080
+  // 3. If it's a backend download endpoint on localhost:8080 or relative
   if (storageUrl && storageUrl.startsWith('/api/resumes/download/')) {
     window.open(`http://localhost:8080${storageUrl}`, '_blank');
     return;
   }
 
-  // 3. If it's a fully qualified URL to localhost:8080
-  if (storageUrl && storageUrl.includes('localhost:8080/api/resumes/download/')) {
+  if (storageUrl && storageUrl.includes(':8080/api/resumes/download/')) {
     window.open(storageUrl, '_blank');
     return;
   }
+
+  // 4. Check localStorage fallback for stored resume file
+  try {
+    const fallbackUrl = localStorage.getItem('hiresmart_latest_resume_url');
+    if (fallbackUrl && fallbackUrl.startsWith('data:')) {
+      const parts = fallbackUrl.split(',');
+      const mimeMatch = parts[0].match(/:(.*?);/);
+      const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+      const b64 = parts[1] || '';
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const fileBlob = new Blob([bytes], { type: mime });
+      const fileBlobUrl = URL.createObjectURL(fileBlob);
+      window.open(fileBlobUrl, '_blank');
+      return;
+    }
+  } catch (err) {}
 
   // 4. If it's a placeholder / dead Cloudflare R2 URL or dummy link,
   // DO NOT navigate to pub-hiresmart-r2.cloudflarestorage.com (avoids DNS_PROBE_FINISHED_NXDOMAIN).

@@ -79,6 +79,49 @@ const DEMO_JOBS: Job[] = [
   }
 ];
 
+const DEMO_APPLICATIONS: Application[] = [
+  {
+    id: 101,
+    jobId: 1,
+    jobTitle: 'Senior Java 25 Spring Boot Engineer',
+    companyName: 'TechCorp Innovations',
+    candidateId: 101,
+    candidateName: 'Rahul Verma',
+    candidateEmail: 'rahul.verma@example.com',
+    resumeId: 101,
+    resumeStorageUrl: 'http://localhost:8080/api/resumes/download/Rahul_Verma_Resume.pdf',
+    status: 'APPLIED',
+    matchScore: 94.0,
+    skillsMatchScore: 96.0,
+    experienceMatchScore: 92.0,
+    educationMatchScore: 94.0,
+    matchExplanation: 'Outstanding match for core Java 25 backend microservices with 5+ years Spring Boot experience.',
+    matchedSkills: ['Java 25', 'Spring Boot', 'Spring Security', 'MySQL'],
+    missingSkills: ['Microservices'],
+    appliedAt: new Date(Date.now() - 3600000 * 5).toISOString()
+  },
+  {
+    id: 102,
+    jobId: 2,
+    jobTitle: 'Full-Stack React & Spring Developer',
+    companyName: 'TechCorp Innovations',
+    candidateId: 102,
+    candidateName: 'Sneha Patel',
+    candidateEmail: 'sneha.patel@example.com',
+    resumeId: 102,
+    resumeStorageUrl: 'http://localhost:8080/api/resumes/download/Sneha_Patel_Resume.pdf',
+    status: 'SHORTLISTED',
+    matchScore: 89.5,
+    skillsMatchScore: 92.0,
+    experienceMatchScore: 88.0,
+    educationMatchScore: 90.0,
+    matchExplanation: 'Solid full-stack versatility across React.js, Tailwind CSS, and Java Spring REST APIs.',
+    matchedSkills: ['React.js', 'JavaScript', 'Tailwind CSS', 'Spring Boot'],
+    missingSkills: ['Java 25'],
+    appliedAt: new Date(Date.now() - 3600000 * 24).toISOString()
+  }
+];
+
 export function App() {
   const getInitialTab = (): string => {
     const p = window.location.pathname.toLowerCase();
@@ -167,10 +210,28 @@ export function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
 
-  // App Data (Initialized with standard active opportunities)
+  // App Data (Initialized with standard active opportunities & persistent storage)
   const [jobs, setJobs] = useState<Job[]>(DEMO_JOBS);
-  const [resumes, setResumes] = useState<Resume[]>([]);
-  const [applications, setApplications] = useState<Application[]>([]);
+  const [resumes, setResumes] = useState<Resume[]>(() => {
+    try {
+      const saved = localStorage.getItem('hiresmart_resumes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [applications, setApplications] = useState<Application[]>(() => {
+    try {
+      const saved = localStorage.getItem('hiresmart_applications');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEMO_APPLICATIONS;
+  });
   const [analysis, setAnalysis] = useState<ResumeAnalysis | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
@@ -188,6 +249,98 @@ export function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const loadApplicationsAndResumes = async (user?: User | null) => {
+    // 1. Instant local restore
+    try {
+      const savedApps = localStorage.getItem('hiresmart_applications');
+      if (savedApps) {
+        const parsed = JSON.parse(savedApps);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setApplications(parsed);
+        }
+      }
+      const savedResumes = localStorage.getItem('hiresmart_resumes');
+      if (savedResumes) {
+        const parsed = JSON.parse(savedResumes);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setResumes(parsed);
+        }
+      }
+    } catch (e) {}
+
+    // 2. Fetch from backend if token exists
+    const token = localStorage.getItem('hiresmart_jwt');
+    if (!token) return;
+
+    const activeUser = user || currentUser;
+    if (!activeUser) return;
+
+    if (activeUser.role === 'RECRUITER' || activeUser.role === 'ADMIN') {
+      try {
+        const res = await api.getRecruiterCandidates();
+        if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+          setApplications(prev => {
+            const merged = [...prev];
+            res.data.forEach((remoteApp: Application) => {
+              const idx = merged.findIndex(a => a.id === remoteApp.id || (a.jobId === remoteApp.jobId && a.candidateEmail === remoteApp.candidateEmail));
+              if (idx >= 0) {
+                merged[idx] = { ...merged[idx], ...remoteApp };
+              } else {
+                merged.unshift(remoteApp);
+              }
+            });
+            try {
+              localStorage.setItem('hiresmart_applications', JSON.stringify(merged));
+            } catch (err) {}
+            return merged;
+          });
+        }
+      } catch (e) {
+        console.warn("Could not fetch recruiter candidates from backend:", e);
+      }
+    } else if (activeUser.role === 'CANDIDATE') {
+      try {
+        const [appsRes, resumesRes] = await Promise.allSettled([
+          api.getMyApplications(),
+          api.getMyResumes()
+        ]);
+        if (appsRes.status === 'fulfilled' && appsRes.value.data && Array.isArray(appsRes.value.data)) {
+          setApplications(prev => {
+            const merged = [...prev];
+            appsRes.value.data.forEach((remoteApp: Application) => {
+              const idx = merged.findIndex(a => a.id === remoteApp.id || (a.jobId === remoteApp.jobId && a.candidateEmail === remoteApp.candidateEmail));
+              if (idx >= 0) {
+                merged[idx] = { ...merged[idx], ...remoteApp };
+              } else {
+                merged.unshift(remoteApp);
+              }
+            });
+            try {
+              localStorage.setItem('hiresmart_applications', JSON.stringify(merged));
+            } catch (err) {}
+            return merged;
+          });
+        }
+        if (resumesRes.status === 'fulfilled' && resumesRes.value.data && Array.isArray(resumesRes.value.data)) {
+          setResumes(prev => {
+            const merged = [...prev];
+            resumesRes.value.data.forEach((r: Resume) => {
+              if (!merged.some(m => m.id === r.id)) {
+                merged.unshift(r);
+              }
+            });
+            try {
+              localStorage.setItem('hiresmart_resumes', JSON.stringify(merged));
+            } catch (err) {}
+            return merged;
+          });
+        }
+      } catch (e) {
+        console.warn("Could not sync candidate applications/resumes:", e);
+      }
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('hiresmart_jwt');
     const savedUser = localStorage.getItem('hiresmart_user');
@@ -200,11 +353,14 @@ export function App() {
           if (user.role === 'CANDIDATE') setActiveTab('candidate-dashboard');
           else if (user.role === 'RECRUITER') setActiveTab('recruiter-dashboard');
           else if (user.role === 'ADMIN') setActiveTab('admin-dashboard');
+          loadApplicationsAndResumes(user);
         }
       } catch {
         localStorage.removeItem('hiresmart_jwt');
         localStorage.removeItem('hiresmart_user');
       }
+    } else {
+      loadApplicationsAndResumes();
     }
 
     // Load active jobs: Merge backend API jobs, locally persisted custom jobs, and DEMO_JOBS
@@ -394,6 +550,7 @@ export function App() {
     else if (user.role === 'ADMIN') setActiveTab('admin-dashboard');
 
     showToast(`Welcome, ${user.fullName}!`);
+    loadApplicationsAndResumes(user);
   };
 
   const handleLogout = () => {
@@ -409,27 +566,74 @@ export function App() {
     setLastName('');
     setPhone('');
     showToast('Signed out of session');
+    loadApplicationsAndResumes(null);
   };
 
-  const handleApply = (job: Job, resumeId: number) => {
+  const handleApply = async (job: Job, resumeId: number) => {
+    const selectedResume = resumes.find(r => r.id === resumeId) || resumes[0];
+    const resumeUrl = selectedResume?.storageUrl || 
+      localStorage.getItem(`hiresmart_resume_file_${resumeId}`) || 
+      localStorage.getItem('hiresmart_latest_resume_url') || 
+      '';
+
     const newApp: Application = {
-      id: Date.now(), jobId: job.id, jobTitle: job.title, companyName: job.companyName,
-      candidateId: currentUser?.id || 4, candidateName: currentUser?.fullName || 'Candidate',
-      candidateEmail: currentUser?.email || 'candidate@email.com', resumeId,
-      resumeStorageUrl: resumes[0]?.storageUrl || '',
-      status: 'APPLIED', matchScore: 92.50, skillsMatchScore: 95.00,
-      experienceMatchScore: 90.00, educationMatchScore: 92.00,
-      matchExplanation: `Strong match! Candidate meets qualifications for ${job.title}.`,
-      matchedSkills: job.requiredSkills.slice(0, 4), missingSkills: ['Advanced CI/CD Automation'],
+      id: Date.now(),
+      jobId: job.id,
+      jobTitle: job.title,
+      companyName: job.companyName,
+      candidateId: currentUser?.id || Date.now(),
+      candidateName: currentUser?.fullName || 'Candidate',
+      candidateEmail: currentUser?.email || 'candidate@hiresmart.ai',
+      resumeId: resumeId || selectedResume?.id || Date.now(),
+      resumeStorageUrl: resumeUrl,
+      status: 'APPLIED',
+      matchScore: 92.50,
+      skillsMatchScore: 95.00,
+      experienceMatchScore: 90.00,
+      educationMatchScore: 92.00,
+      matchExplanation: `Strong match! Candidate resume and profile align with technical expectations for ${job.title} at ${job.companyName}.`,
+      matchedSkills: job.requiredSkills.slice(0, 4),
+      missingSkills: job.requiredSkills.length > 4 ? [job.requiredSkills[job.requiredSkills.length - 1]] : ['Automated CI/CD'],
       appliedAt: new Date().toISOString()
     };
-    setApplications(prev => [newApp, ...prev]);
+
+    setApplications(prev => {
+      const updated = [newApp, ...prev.filter(a => !(a.jobId === newApp.jobId && a.candidateEmail === newApp.candidateEmail))];
+      try {
+        localStorage.setItem('hiresmart_applications', JSON.stringify(updated));
+      } catch (e) {
+        console.warn("Error saving application to localStorage:", e);
+      }
+      return updated;
+    });
+
     showToast(`Applied for "${job.title}" at ${job.companyName}!`);
+
+    // Synchronize with backend API if candidate is authenticated
+    try {
+      if (localStorage.getItem('hiresmart_jwt')) {
+        await api.applyForJob(job.id, newApp.resumeId);
+      }
+    } catch (e) {
+      console.warn("Backend apply API offline or skipped, saved to local pipeline:", e);
+    }
   };
 
-  const handleUpdateStatus = (appId: number, status: string) => {
-    setApplications(prev => prev.map(a => a.id === appId ? { ...a, status: status as any } : a));
+  const handleUpdateStatus = (appId: number, status: string, notes?: string, reason?: string) => {
+    setApplications(prev => {
+      const updated = prev.map(a => a.id === appId ? { ...a, status: status as any } : a);
+      try {
+        localStorage.setItem('hiresmart_applications', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
     showToast(`Application updated to: ${status}`);
+
+    try {
+      if (localStorage.getItem('hiresmart_jwt')) {
+        api.updateApplicationStatus(appId, status, notes, reason);
+      }
+    } catch (e) {}
   };
 
   const handleApproveJob = (jobId: number) => {
@@ -589,7 +793,13 @@ export function App() {
           isOpen={isUploadModalOpen}
           onClose={() => setIsUploadModalOpen(false)}
           onUploadSuccess={(res, ana) => {
-            setResumes([res, ...resumes]);
+            setResumes(prev => {
+              const updated = [res, ...prev.filter(r => r.id !== res.id && r.originalFilename !== res.originalFilename)];
+              try {
+                localStorage.setItem('hiresmart_resumes', JSON.stringify(updated));
+              } catch (e) {}
+              return updated;
+            });
             setAnalysis(ana);
             setActiveTab('ai-resume');
             showToast(`Resume "${res.originalFilename}" uploaded successfully!`);

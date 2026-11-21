@@ -208,6 +208,61 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
               ))}
             </div>
           )}
+
+          {/* Submitted Applications Feed */}
+          {applications.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Your Applications ({applications.length})
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Live recruitment pipeline tracking and AI match results
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {applications.map((app) => (
+                  <div
+                    key={app.id}
+                    className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-blue-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-slate-900 text-sm">{app.jobTitle}</span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          app.status === 'SHORTLISTED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          app.status === 'INTERVIEW_SCHEDULED' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                          app.status === 'REJECTED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                          'bg-blue-50 text-blue-700 border border-blue-200'
+                        }`}>
+                          {app.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {app.companyName} • Submitted: {new Date(app.appliedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                        AI Match: {app.matchScore}%
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openResumeFile(app.resumeStorageUrl, `${app.candidateName.replace(/\s+/g, '_')}_Resume.pdf`, app.candidateName)}
+                        className="text-xs font-bold text-slate-700 hover:text-blue-600 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 transition-colors"
+                      >
+                        View Resume <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column (4 cols): Your AI toolkit (Exact Match) */}
