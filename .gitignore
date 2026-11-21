@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Production build outputs
+dist/
+frontend/dist/
+target/
+backend/target/
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# IDE and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.class
+
+# Environment
+.env
