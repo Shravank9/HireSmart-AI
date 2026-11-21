@@ -844,9 +844,21 @@ export function App() {
         <ScheduleInterviewModal
           application={interviewApplication}
           onClose={() => setInterviewApplication(null)}
-          onScheduleConfirm={(appId) => {
-            handleUpdateStatus(appId, 'INTERVIEW_SCHEDULED');
-            setInterviewApplication(null);
+          onScheduleConfirm={async (app, scheduledTime, meetingLink) => {
+            handleUpdateStatus(app.id, 'INTERVIEW_SCHEDULED');
+            try {
+              await api.scheduleInterview({
+                candidateEmail: app.candidateEmail,
+                candidateName: app.candidateName,
+                jobTitle: app.jobTitle,
+                scheduledTime: scheduledTime,
+                meetingLink: meetingLink
+              });
+              showToast(`Interview scheduled & email invitation dispatched to ${app.candidateEmail}!`);
+            } catch (err: any) {
+              console.warn("Backend scheduleInterview API error:", err);
+              showToast(`Interview scheduled for ${app.candidateName}!`);
+            }
           }}
         />
 

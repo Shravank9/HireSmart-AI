@@ -5,7 +5,7 @@ import { Application } from '../../types';
 interface ScheduleInterviewModalProps {
   application: Application | null;
   onClose: () => void;
-  onScheduleConfirm: (applicationId: number, scheduledTime: string, meetingLink: string) => void;
+  onScheduleConfirm: (application: Application, scheduledTime: string, meetingLink: string) => Promise<void> | void;
 }
 
 export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
@@ -22,21 +22,23 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     const fullTimestamp = `${date}T${time}:00`;
-    onScheduleConfirm(application.id, fullTimestamp, meetingLink);
-
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await onScheduleConfirm(application, fullTimestamp, meetingLink);
       setIsSuccess(true);
       setTimeout(() => {
         onClose();
         setIsSuccess(false);
-      }, 1000);
-    }, 400);
+      }, 1500);
+    } catch (err) {
+      console.error("Error scheduling interview:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -144,9 +146,18 @@ export const ScheduleInterviewModal: React.FC<ScheduleInterviewModalProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
               >
-                <Calendar className="w-4 h-4" /> Send Invitation & Schedule
+                {isSubmitting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Dispatching Invitation...</span>
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="w-4 h-4" /> Send Invitation & Schedule
+                  </>
+                )}
               </button>
             </div>
           </form>
