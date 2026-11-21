@@ -10,7 +10,10 @@ import {
   X,
   ChevronRight,
   ShieldCheck,
-  Lock
+  Lock,
+  UploadCloud,
+  FileText,
+  Paperclip
 } from 'lucide-react';
 import { Job, Resume } from '../../types';
 import { formatSalaryInr } from '../../utils/currency';
@@ -18,7 +21,7 @@ import { formatSalaryInr } from '../../utils/currency';
 interface JobsBrowseProps {
   jobs: Job[];
   resumes: Resume[];
-  onApply: (job: Job, resumeId: number) => void;
+  onApply: (job: Job, resumeId: number, customResume?: Resume) => void;
   onOpenUpload: () => void;
 }
 
@@ -33,6 +36,9 @@ export const JobsBrowse: React.FC<JobsBrowseProps> = ({
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedResumeId, setSelectedResumeId] = useState<number>(resumes[0]?.id || 1);
   const [hasApplied, setHasApplied] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedResume, setAttachedResume] = useState<Resume | null>(null);
+  const [isAttaching, setIsAttaching] = useState(false);
 
   const ALL_SKILLS = ['All', 'Java 25', 'Spring Boot', 'React.js', 'Python', 'MySQL', 'Docker', 'Microservices'];
 
@@ -55,13 +61,59 @@ export const JobsBrowse: React.FC<JobsBrowseProps> = ({
     });
   }, [approvedJobs, searchQuery, selectedSkill]);
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setIsAttaching(true);
+      try {
+        const fileDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(file);
+        });
+
+        const resumeId = Date.now();
+        const newResume: Resume = {
+          id: resumeId,
+          candidateId: 1,
+          originalFilename: file.name,
+          storageKey: `resumes/cand_1_${resumeId}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`,
+          storageUrl: fileDataUrl,
+          fileSize: file.size,
+          contentType: file.type || 'application/pdf',
+          extractedText: `Candidate Resume parsed for: ${file.name}`,
+          uploadTimestamp: new Date().toISOString()
+        };
+
+        try {
+          localStorage.setItem(`hiresmart_resume_file_${resumeId}`, fileDataUrl);
+          localStorage.setItem('hiresmart_latest_resume_url', fileDataUrl);
+          localStorage.setItem('hiresmart_latest_resume_name', file.name);
+          const existing = JSON.parse(localStorage.getItem('hiresmart_resumes') || '[]');
+          localStorage.setItem('hiresmart_resumes', JSON.stringify([newResume, ...existing.filter((r: any) => r.originalFilename !== file.name)]));
+        } catch (storageErr) {}
+
+        setAttachedFile(file);
+        setAttachedResume(newResume);
+        setSelectedResumeId(newResume.id);
+      } catch (err) {
+        console.error("Error reading PDF resume:", err);
+      } finally {
+        setIsAttaching(false);
+      }
+    }
+  };
+
   const handleApplyClick = () => {
     if (selectedJob) {
-      onApply(selectedJob, selectedResumeId);
+      onApply(selectedJob, selectedResumeId, attachedResume || undefined);
       setHasApplied(true);
       setTimeout(() => {
         setSelectedJob(null);
         setHasApplied(false);
+        setAttachedFile(null);
+        setAttachedResume(null);
       }, 1500);
     }
   };
@@ -252,12 +304,56 @@ export const JobsBrowse: React.FC<JobsBrowseProps> = ({
                 </div>
               </div>
 
-              {/* Resume Selector */}
+              {/* Resume Selector & Direct PDF Upload */}
               <div className="pt-4 border-t border-slate-200">
-                <h4 className="font-bold uppercase tracking-wider text-slate-900 text-xs mb-2">
-                  Select Resume for 1-Click Application:
-                </h4>
-                {resumes.length > 0 ? (
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold uppercase tracking-wider text-slate-900 text-xs">
+                    Attach or Select PDF Resume:
+                  </h4>
+                  <label className="cursor-pointer text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition-colors">
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    <span>+ Upload New PDF File</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {isAttaching ? (
+                  <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 animate-spin text-blue-600" />
+                    <span>Processing and securing PDF resume...</span>
+                  </div>
+                ) : attachedFile ? (
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">
+                        PDF
+                      </div>
+                      <div>
+                        <span className="font-bold text-sm text-slate-900 block">{attachedFile.name}</span>
+                        <span className="text-xs text-slate-500">{(attachedFile.size / 1024).toFixed(1)} KB • Attached for this application</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Attached
+                      </span>
+                      <label className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer">
+                        Change
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx"
+                          onChange={handleFileSelect}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : resumes.length > 0 ? (
                   <div className="space-y-2">
                     {resumes.map((res) => (
                       <label
@@ -273,7 +369,11 @@ export const JobsBrowse: React.FC<JobsBrowseProps> = ({
                             type="radio"
                             name="resumeSelection"
                             checked={selectedResumeId === res.id}
-                            onChange={() => setSelectedResumeId(res.id)}
+                            onChange={() => {
+                              setSelectedResumeId(res.id);
+                              setAttachedFile(null);
+                              setAttachedResume(null);
+                            }}
                             className="text-blue-600 focus:ring-blue-500"
                           />
                           <div>
@@ -286,19 +386,20 @@ export const JobsBrowse: React.FC<JobsBrowseProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-center justify-between">
-                    <span>No resume uploaded yet. Upload a PDF resume to apply.</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedJob(null);
-                        onOpenUpload();
-                      }}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm"
-                    >
-                      Upload Resume
-                    </button>
-                  </div>
+                  <label className="p-6 border-2 border-dashed border-blue-200 hover:border-blue-400 bg-blue-50/40 rounded-2xl cursor-pointer flex flex-col items-center justify-center text-center transition-all group">
+                    <UploadCloud className="w-8 h-8 text-blue-600 group-hover:scale-110 transition-transform mb-2" />
+                    <span className="text-sm font-bold text-slate-900">Choose your Resume PDF to apply</span>
+                    <span className="text-xs text-slate-500 mt-1">Supports PDF, DOC, DOCX up to 10MB</span>
+                    <span className="mt-3 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm">
+                      Browse PDF File
+                    </span>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
                 )}
               </div>
             </div>
@@ -307,7 +408,11 @@ export const JobsBrowse: React.FC<JobsBrowseProps> = ({
             <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setSelectedJob(null)}
+                onClick={() => {
+                  setSelectedJob(null);
+                  setAttachedFile(null);
+                  setAttachedResume(null);
+                }}
                 className="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-bold transition-colors"
               >
                 Close
@@ -316,7 +421,7 @@ export const JobsBrowse: React.FC<JobsBrowseProps> = ({
               <button
                 type="button"
                 onClick={handleApplyClick}
-                disabled={resumes.length === 0 || hasApplied}
+                disabled={(!attachedFile && resumes.length === 0) || hasApplied}
                 className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {hasApplied ? (

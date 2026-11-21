@@ -33,12 +33,17 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({
   onOpenCreateJobModal
 }) => {
   const [selectedStage, setSelectedStage] = useState('ALL');
+  const [selectedJobFilter, setSelectedJobFilter] = useState('ALL');
 
   const STAGES = ['ALL', 'APPLIED', 'UNDER_REVIEW', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'SELECTED', 'REJECTED'];
 
+  const jobFilteredApps = selectedJobFilter === 'ALL'
+    ? applications
+    : applications.filter(a => String(a.jobId) === String(selectedJobFilter) || a.jobTitle.toLowerCase() === selectedJobFilter.toLowerCase());
+
   const filteredApps = selectedStage === 'ALL' 
-    ? applications 
-    : applications.filter(a => a.status === selectedStage);
+    ? jobFilteredApps 
+    : jobFilteredApps.filter(a => a.status === selectedStage);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto">
@@ -105,24 +110,48 @@ export const RecruiterDashboard: React.FC<RecruiterDashboardProps> = ({
         </div>
       </div>
 
-      {/* Stage Selector Filters */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3 flex flex-wrap items-center gap-2 text-sm font-bold shadow-sm">
-        <span className="text-slate-500 mr-2 flex items-center gap-1.5 text-sm">
-          <Filter className="w-4 h-4" /> Stage:
-        </span>
-        {STAGES.map((st) => (
-          <button
-            key={st}
-            onClick={() => setSelectedStage(st)}
-            className={`px-4 py-1.5 rounded-xl transition-all ${
-              selectedStage === st
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
-            }`}
+      {/* Filters Bar: Vacancy Filter Dropdown + Stage Filter */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        {/* Left: Filter by specific posted vacancy */}
+        <div className="flex items-center gap-2.5">
+          <Briefcase className="w-4 h-4 text-blue-600 shrink-0" />
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">Filter by Vacancy:</span>
+          <select
+            value={selectedJobFilter}
+            onChange={(e) => setSelectedJobFilter(e.target.value)}
+            className="px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-slate-50 hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer shadow-sm"
           >
-            {st.replace('_', ' ')}
-          </button>
-        ))}
+            <option value="ALL">All Vacancies ({applications.length} applicants total)</option>
+            {jobs.map((j) => {
+              const count = applications.filter(a => a.jobId === j.id || a.jobTitle.toLowerCase() === j.title.toLowerCase()).length;
+              return (
+                <option key={j.id} value={String(j.id)}>
+                  {j.title} ({count} {count === 1 ? 'applicant' : 'applicants'})
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        {/* Right: Stage Selector Filters */}
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+          <span className="text-slate-500 mr-1 flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5" /> Stage:
+          </span>
+          {STAGES.map((st) => (
+            <button
+              key={st}
+              onClick={() => setSelectedStage(st)}
+              className={`px-3 py-1.5 rounded-xl transition-all ${
+                selectedStage === st
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
+              }`}
+            >
+              {st.replace('_', ' ')}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Applicant Cards List */}

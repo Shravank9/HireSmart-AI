@@ -227,10 +227,10 @@ export function App() {
       const saved = localStorage.getItem('hiresmart_applications');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
-    return DEMO_APPLICATIONS;
+    return [];
   });
   const [analysis, setAnalysis] = useState<ResumeAnalysis | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -569,8 +569,18 @@ export function App() {
     loadApplicationsAndResumes(null);
   };
 
-  const handleApply = async (job: Job, resumeId: number) => {
-    const selectedResume = resumes.find(r => r.id === resumeId) || resumes[0];
+  const handleApply = async (job: Job, resumeId: number, customResume?: Resume) => {
+    if (customResume) {
+      setResumes(prev => {
+        const updated = [customResume, ...prev.filter(r => r.id !== customResume.id)];
+        try {
+          localStorage.setItem('hiresmart_resumes', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+    }
+
+    const selectedResume = customResume || resumes.find(r => r.id === resumeId) || resumes[0];
     const resumeUrl = selectedResume?.storageUrl || 
       localStorage.getItem(`hiresmart_resume_file_${resumeId}`) || 
       localStorage.getItem('hiresmart_latest_resume_url') || 
